@@ -1,0 +1,419 @@
+Modern MLB Performance: Trends and Predictors in the Statcast Era
+Appendix
+By Aaron Slattery, Xueqing Li, Pedro Medero, Mark Tomassini, Marshall Warner, Shenhua Zhang
+
+Question 1:
+Code inaccessible due to computer issues (discussed with professor Besser over email).
+
+
+Question 2:
+---
+title: "Final Group Visual"
+author: "Shenhua Zhang"
+date: "2025-04-25"
+output: word_document
+---
+
+```{r setup, include=TRUE}
+batting_data <- read.csv("C:/UIUC/IS445/Final Group Project/baseball stats.csv")
+head(batting_data)
+dim(batting_data)
+```
+Secondly, In order to predict batting average, we need 4 aspects of baseball players’ data to measure: Contact Quality, Swing Metrics, Plate Discipline, and Batted Ball Profile. Our research question is: which of the 4 aspects influence batting AVG the most? We hypothesize that batting AVG is influenced by contact quality the most. We will use a random forest regression model to conduct analysis. 
+
+
+```{r}
+# Assuming your data is in a dataframe called 'batting_data'
+
+# Contact Quality variables
+contact_quality <- c("exit_velocity_avg", "hard_hit_percent", 
+                    "xba", "xslg", "xiso", "avg_best_speed", 
+                    "avg_hyper_speed", "barrel_batted_rate")
+
+# Swing Metrics variables
+swing_metrics <- c("avg_swing_speed", "fast_swing_rate", 
+                  "blasts_contact", "blasts_swing", 
+                  "squared_up_contact", "squared_up_swing",
+                  "avg_swing_length", "swords")
+
+# Plate Discipline variables
+plate_discipline <- c("k_percent", "bb_percent", "whiff_percent",
+                     "swing_percent", "strikeout", "walk")
+
+# Batted Ball Profile variables
+batted_ball <- c("launch_angle_avg", "sweet_spot_percent",
+                "single", "double", "triple", "home_run",
+                "slg_percent", "on_base_percent")
+#####
+library(dplyr)
+library(caret)
+library(randomForest)
+
+# Remove non-predictive columns and batting_avg (since it's our target)
+predictors <- batting_data %>%
+  select(-last_name..first_name, -player_id, -year, -player_age, 
+         -ab, -pa, -hit, -on_base_plus_slg, -woba, -xwoba, -xobp,
+         -batting_avg)  # remove target from predictors
+
+target <- batting_data$batting_avg
+
+# Check for missing values
+sum(is.na(predictors))
+sum(is.na(target))
+
+# Handle missing values if needed (this is just one approach)
+predictors <- predictors %>% 
+  mutate(across(everything(), ~ifelse(is.na(.), median(., na.rm = TRUE), .)))
+```
+#####
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Split data into training and testing sets
+trainIndex <- createDataPartition(target, p = 0.8, list = FALSE)
+trainData <- predictors[trainIndex, ]
+testData <- predictors[-trainIndex, ]
+trainTarget <- target[trainIndex]
+testTarget <- target[-trainIndex]
+
+# Train random forest model
+rf_model <- randomForest(x = trainData, y = trainTarget, 
+                        ntree = 500, importance = TRUE)
+
+# Predict on test set
+predictions <- predict(rf_model, testData)
+
+# Evaluate model performance
+postResample(predictions, testTarget)
+
+# Get variable importance
+importance <- importance(rf_model)
+varImpPlot(rf_model)
+
+# Create a dataframe for easier analysis
+var_importance <- data.frame(Variable = rownames(importance),
+                            Importance = importance[, "%IncMSE"])
+
+# Categorize variables into our 4 aspects
+var_importance$Category <- case_when(
+  var_importance$Variable %in% contact_quality ~ "Contact Quality",
+  var_importance$Variable %in% swing_metrics ~ "Swing Metrics",
+  var_importance$Variable %in% plate_discipline ~ "Plate Discipline",
+  var_importance$Variable %in% batted_ball ~ "Batted Ball Profile",
+  TRUE ~ "Other"
+)
+
+# Calculate average importance by category
+category_importance <- var_importance %>%
+  group_by(Category) %>%
+  summarise(Avg_Importance = mean(Importance),
+            Total_Importance = sum(Importance)) %>%
+  arrange(desc(Avg_Importance))
+
+# View results
+print(category_importance)
+
+# Visualize
+library(ggplot2)
+
+ggplot(category_importance, aes(x = reorder(Category, -Avg_Importance), y = Avg_Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = round(Avg_Importance, 2)),  # Round to 2 decimal places
+            vjust = -0.5,  # Position text above the bars
+            color = "black", 
+            size = 3) +
+  labs(title = "Figure 2: Average Variable Importance by Action Category in Baseball",
+       x = "Category",
+       y = "Average % Increase in MSE") +
+  theme_minimal()
+```
+
+
+Question 3:
+# Author: Xueqing Li
+# IS 445 final project 
+# Research question 3
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import pearsonr
+
+# data prep
+df = pd.read_csv('baseball stats (1).csv')
+
+df_sub = df[['k_percent', 'slg_percent', 'on_base_percent']].dropna()
+x = df_sub['k_percent']
+y_slg = df_sub['slg_percent']
+y_obp = df_sub['on_base_percent']
+
+# calculate LR
+m_slg, b_slg = np.polyfit(x, y_slg, 1)
+m_obp, b_obp = np.polyfit(x, y_obp, 1)
+
+# calculate pearson
+r_slg, _ = pearsonr(x, y_slg)
+r_obp, _ = pearsonr(x, y_obp)
+
+# create figure
+fig, (ax1, ax2) = plt.subplots(
+    2, 1,
+    figsize=(10, 16),
+    sharex=True,
+    gridspec_kw={'hspace': 0.3}
+)
+
+fig.suptitle(
+    'Figure 3: Relationship of Strikeout Rate (K%) to SLG% and OBP',
+    fontsize=18
+)
+
+# K% vs SLG%
+ax1.scatter(x, y_slg, alpha=0.6)
+ax1.plot(x, m_slg * x + b_slg, '--')
+ax1.set_ylabel('SLG%', fontsize=16)
+ax1.set_title('K% vs SLG%', fontsize=16)
+ax1.text(
+    0.05, 0.95, f"Pearson r = {r_slg:.2f}",
+    transform=ax1.transAxes, ha='left', va='top', fontsize=14,
+    bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.8)
+)
+
+# K% vs OBP
+ax2.scatter(x, y_obp, alpha=0.6)
+ax2.plot(x, m_obp * x + b_obp, '--')
+ax2.set_xlabel('Strikeout Rate (K%)', fontsize=16)
+ax2.set_ylabel('OBP', fontsize=16)
+ax2.set_title('K% vs OBP', fontsize=16)
+ax2.text(
+    0.05, 0.95, f"Pearson r = {r_obp:.2f}",
+    transform=ax2.transAxes, ha='left', va='top', fontsize=14,
+    bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.8)
+)
+
+plt.subplots_adjust(top=0.92, left=0.08, right=0.97)
+plt.show()
+
+from scipy.stats import pearsonr, spearmanr
+
+# data prep
+df = pd.read_csv('baseball stats (1).csv')
+
+df_sub = df[['k_percent', 'slg_percent', 'on_base_percent', 'bb_percent']].dropna()
+
+# classify low/mid/high bb group
+df_sub['bb_group'] = pd.qcut(
+    df_sub['bb_percent'],
+    [0, 0.33, 0.66, 1.0],
+    labels=['low_bb', 'mid_bb', 'high_bb']
+)
+
+# make table
+corr_results = []
+for grp in df_sub['bb_group'].cat.categories:
+    grp_df = df_sub[df_sub['bb_group'] == grp]
+    pearson_r, pearson_p = pearsonr(grp_df['k_percent'], grp_df['on_base_percent'])
+    spearman_rho, spearman_p = spearmanr(grp_df['k_percent'], grp_df['on_base_percent'])
+    corr_results.append({
+        'BB Group': grp,
+        'Pearson r': pearson_r,
+        'Pearson p': pearson_p,
+        'Spearman rho': spearman_rho,
+        'Spearman p': spearman_p
+    })
+
+corr_df = pd.DataFrame(corr_results)
+print(corr_df)
+
+
+Question 4:
+# Load lib
+library(ggplot2)
+library(patchwork)
+library(tidyverse)
+library(zoo)
+
+# Load dataset
+df <- read.csv("C:/Users/aaron/Downloads/stats.csv", stringsAsFactors = FALSE)
+
+# Clean and prepare data
+df_clean <- df %>%
+  separate(col = names(df)[1], into = c("last_name", "first_name"), sep = ", ") %>%
+  mutate(player_name = paste(trimws(first_name), trimws(last_name))) %>%
+  mutate(across(c(exit_velocity_avg, launch_angle_avg, hard_hit_percent, player_age), as.numeric)) %>%
+  drop_na(exit_velocity_avg, launch_angle_avg, hard_hit_percent, player_age) %>%
+  filter(player_age >= 20 & player_age <= 45)
+
+# Create age summary
+age_summary <- df_clean %>%
+  group_by(player_age) %>%
+  summarise(
+	avg_exit_velo = mean(exit_velocity_avg, na.rm = TRUE),
+	avg_launch_angle = mean(launch_angle_avg, na.rm = TRUE),
+	avg_hard_hit = mean(hard_hit_percent, na.rm = TRUE),
+	n_players = n(),
+	.groups = "drop"
+  ) %>%
+  mutate(
+	rolling_exit_velo = rollmean(avg_exit_velo, k = 3, fill = NA),
+	rolling_launch_angle = rollmean(avg_launch_angle, k = 3, fill = NA),
+	rolling_hard_hit = rollmean(avg_hard_hit, k = 3, fill = NA)
+  )
+
+# Set theme
+custom_theme <- theme_minimal(base_size = 11) +
+  theme(
+	plot.title = element_text(size = 10, face = "bold", hjust = 0.5, margin = margin(b = 2)),
+	axis.title.x = element_text(size = 9, margin = margin(t = 3)),
+	axis.title.y = element_text(size = 9, margin = margin(r = 8)),
+	axis.text = element_text(size = 8),
+	panel.grid.minor = element_blank(),
+	plot.margin = margin(3, 8, 3, 8)
+  )
+
+# Figure 4A: Exit Velocity by Age
+exit_velo_plot <- ggplot(age_summary, aes(x = player_age, y = avg_exit_velo)) +
+  geom_point(color = "#3498db", size = 1.0, alpha = 0.7) +
+  geom_line(aes(y = rolling_exit_velo), color = "#3498db", linewidth = 1.0) +
+  labs(title = "Figure 4A: Exit Velocity by Age", x = NULL, y = "Exit Velocity (mph)") +
+  scale_y_continuous(limits = c(78, 90), breaks = c(80.0, 82.5, 85.0, 87.5)) +
+  scale_x_continuous(limits = c(20, 45), breaks = c(20, 25, 30, 35, 40, 45)) +
+  custom_theme
+
+# Figure 4B: Launch Angle by Age
+launch_angle_plot <- ggplot(age_summary, aes(x = player_age, y = avg_launch_angle)) +
+  geom_point(color = "#e74c3c", size = 1.0, alpha = 0.7) +
+  geom_line(aes(y = rolling_launch_angle), color = "#e74c3c", linewidth = 1.0) +
+  labs(title = "Figure 4B: Launch Angle by Age", x = NULL, y = "Launch Angle (deg)") +
+  scale_y_continuous(limits = c(-2, 14), breaks = c(0, 4, 8, 12)) +
+  scale_x_continuous(limits = c(20, 45), breaks = c(20, 25, 30, 35, 40, 45)) +
+  custom_theme
+
+# Figure 4C: Hard-Hit % by Age
+hard_hit_plot <- ggplot(age_summary, aes(x = player_age, y = avg_hard_hit)) +
+  geom_point(color = "#9b59b6", size = 1.0, alpha = 0.7) +
+  geom_line(aes(y = rolling_hard_hit), color = "#9b59b6", linewidth = 1.0) +
+  labs(title = "Figure 4C: Hard-Hit % by Age", x = "Age", y = "Hard-Hit (%)") +
+  scale_y_continuous(limits = c(-5, 35), breaks = c(0, 10, 20, 30)) +
+  scale_x_continuous(limits = c(20, 45), breaks = c(20, 25, 30, 35, 40, 45)) +
+  custom_theme
+
+# Combine plots
+final_plot <- exit_velo_plot / launch_angle_plot / hard_hit_plot +
+  plot_layout(heights = c(1, 1, 1.1)) +
+  plot_annotation(theme = theme(plot.margin = margin(1, 1, 1, 1)))
+
+# Display plots
+print(final_plot)
+
+
+Question 5:
+
+import pandas as pd
+import statsmodels.formula.api as smf
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('/Users/pjmedero/Downloads/regression_data_with_k.csv')
+
+print("Available columns:", df.columns.tolist())
+
+model_k = smf.ols('k_percent ~ avg_velocity + breaking_pct', data=df).fit()
+model_xw = smf.ols('xwoba ~ avg_velocity + breaking_pct', data=df).fit()
+
+print("\n=== K% Regression ===")
+print(model_k.summary())
+print("\n=== xwOBA Regression ===")
+print(model_xw.summary())
+
+plt.figure()
+sc1 = plt.scatter(
+df['avg_velocity'],
+df['k_percent'],
+c=df['breaking_pct'],
+cmap='viridis',
+s=50,
+edgecolor='k'
+)
+plt.colorbar(sc1, label='Breaking Pitch %')
+plt.xlabel('Average Velocity (mph)')
+plt.ylabel('Strikeout Rate (K%)')
+plt.title('Figure 5.A: Velocity & Pitch Mix vs K%')
+plt.tight_layout()
+
+# 6. Plot: Velocity & Pitch Mix vs xwOBA
+plt.figure()
+sc2 = plt.scatter(
+df['avg_velocity'],
+df['xwoba'],
+c=df['breaking_pct'],
+cmap='viridis',
+s=50,
+edgecolor='k'
+)
+plt.colorbar(sc2, label='Breaking Pitch %')
+plt.xlabel('Average Velocity (mph)')
+plt.ylabel('Expected wOBA')
+plt.title('Figure 5.B: Velocity & Pitch Mix vs xwOBA')
+plt.tight_layout()
+
+plt.show()
+
+
+Question 6:
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+import statsmodels.api as sm
+
+df = pd.read_csv('savant_data-2.csv')
+
+exit_velocity = df['launch_speed']
+hard_hit_percentage = df['hardhit_percent']
+slugging_percentage = df['slg']
+
+data = pd.DataFrame({'Exit Velocity': exit_velocity, 'Hard Hit %': hard_hit_percentage, 'Slugging %': slugging_percentage})
+
+plt.figure(figsize=(10, 7))
+scatter = plt.scatter(data['Exit Velocity'], data['Hard Hit %'], c=data['Slugging %'], cmap='coolwarm', s=50, alpha=0.7, edgecolors='w')
+
+plt.colorbar(scatter, label='Slugging Percentage')
+
+sns.regplot(x='Exit Velocity', y='Hard Hit %', data=data,scatter=False,line_kws={"color": "black", "linewidth": 2, "linestyle": "dashed"})
+
+plt.xlabel('AVG Exit Velocity (mph)')
+plt.ylabel('Hard Hit Percentage')
+plt.title('Figure 6: Interaction of Exit Velocity and Hard Hit % on Slugging')
+
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+X = data[['Exit Velocity', 'Hard Hit %']]
+y = data['Slugging %']
+
+model = LinearRegression().fit(X, y)
+
+X_const = sm.add_constant(X)
+ols_model = sm.OLS(y, X_const).fit()
+print(ols_model.summary())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
